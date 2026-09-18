@@ -1,130 +1,103 @@
-import math
+"""Deterministic, transparent scenario simulation for SecondSelf.
+
+This is a simple heuristic tool, not a scientific model or a prediction of
+real-world outcomes.
+"""
 
 
-def clamp(value, minimum=0, maximum=100):
-    return max(minimum, min(value, maximum))
+def _clamp(value, minimum=0.0, maximum=100.0):
+	"""Keep a score within the documented range."""
+	return max(minimum, min(maximum, float(value)))
 
 
-def simulate(
-    current_skill,
-    current_study,
-    current_projects,
-    current_exercise,
-    future_study,
-    future_projects,
-    future_exercise,
-    duration_months
-):
-    """
-    Simulates possible future development.
+def _number(mapping, key, default=0.0):
+	"""Read a numeric input without requiring any external dependencies."""
+	try:
+		return float(mapping.get(key, default))
+	except (TypeError, ValueError, AttributeError):
+		return float(default)
 
-    IMPORTANT:
-    These are simulation indicators, not scientifically validated
-    predictions of a person's actual future.
-    """
 
-    months = list(range(duration_months + 1))
+def simulate(input_data):
+	"""Return monthly heuristic indicators for a current state and scenario.
 
-    skill = []
-    projects = []
-    consistency = []
-    balance = []
+	Expected input::
 
-    # Starting values
-    skill_value = float(current_skill)
-    project_value = float(current_projects * 10)
+		{
+			"current": {
+				"skill_level": 60,
+				"study_hours_per_day": 2,
+				"projects_per_month": 1,
+				"exercise_days_per_week": 3,
+			},
+			"scenario": {
+				"study_hours_per_day": 3,
+				"projects_per_month": 2,
+				"exercise_days_per_week": 4,
+				"duration_months": 6,
+			},
+		}
 
-    for month in months:
+	Scenario values replace current values for the simulated period. The
+	returned ``months`` list includes month 0 (the starting point).
+	"""
+	if not isinstance(input_data, dict):
+		raise TypeError("input_data must be a dictionary")
 
-        if month > 0:
+	current = input_data.get("current", {})
+	scenario = input_data.get("scenario", {})
+	if not isinstance(current, dict) or not isinstance(scenario, dict):
+		raise TypeError("current and scenario must be dictionaries")
 
-            # ---- SKILL GROWTH ----
-            study_effect = future_study / 4
+	duration = max(0, int(_number(scenario, "duration_months", 0)))
+	skill = _clamp(_number(current, "skill_level", 0))
+	study = max(0.0, _number(scenario, "study_hours_per_day",
+							  _number(current, "study_hours_per_day", 0)))
+	projects = max(0.0, _number(scenario, "projects_per_month",
+								_number(current, "projects_per_month", 0)))
+	exercise = max(0.0, _number(scenario, "exercise_days_per_week",
+								_number(current, "exercise_days_per_week", 0)))
 
-            project_effect = future_projects / 2
+	months = []
+	for month in range(duration + 1):
+		# Each month adds a capped fraction of available study effort.
+		skill_value = _clamp(skill + month * (study * 1.5))
+		project_value = _clamp(projects * 20.0 + month * projects * 4.0)
+		consistency_value = _clamp((study / 4.0) * 45.0 +
+								   (projects / 3.0) * 30.0 +
+								   (exercise / 5.0) * 25.0)
+		# Balance rewards moderate exercise and a manageable study load.
+		exercise_score = 100.0 - abs(exercise - 4.0) * 18.0
+		study_score = 100.0 - abs(study - 3.0) * 15.0
+		balance_value = _clamp((exercise_score + study_score) / 2.0)
 
-            growth = (
-                2.2 * study_effect +
-                1.4 * project_effect
-            )
+		months.append({
+			"month": month,
+			"skill_growth": round(skill_value, 2),
+			"project_experience": round(project_value, 2),
+			"consistency": round(consistency_value, 2),
+			"balance": round(balance_value, 2),
+		})
 
-            # Diminishing returns as skill increases
-            growth *= (1 - skill_value / 130)
-
-            skill_value += growth
-
-            # ---- PROJECT EXPERIENCE ----
-            project_value += future_projects * 5
-
-            # ---- CONSISTENCY ----
-            target_load = min(future_study / 6, 1)
-
-            exercise_component = future_exercise / 7
-
-            consistency_value = (
-                45 +
-                target_load * 35 +
-                exercise_component * 20
-            )
-
-            # ---- BALANCE ----
-            study_pressure = max(
-                0,
-                future_study - 3
-            )
-
-            balance_value = (
-                85
-                - study_pressure * 9
-                + future_exercise * 3
-            )
-
-        else:
-
-            consistency_value = 60
-
-            balance_value = 70
-
-        skill.append(round(clamp(skill_value), 1))
-        projects.append(round(clamp(project_value), 1))
-        consistency.append(round(clamp(consistency_value), 1))
-        balance.append(round(clamp(balance_value), 1))
-
-    return {
-        "months": months,
-        "skill": skill,
-        "projects": projects,
-        "consistency": consistency,
-        "balance": balance,
-
-        "final": {
-            "skill": round(skill[-1]),
-            "projects": round(projects[-1]),
-            "consistency": round(consistency[-1]),
-            "balance": round(balance[-1])
+	return {"months": months}
+if __name__ == "__main__":
+    test_input = {
+        "current": {
+            "skill_level": 50,
+            "study_hours_per_day": 2,
+            "projects_per_month": 1,
+            "exercise_days_per_week": 3
+        },
+        "scenario": {
+            "study_hours_per_day": 4,
+            "projects_per_month": 2,
+            "exercise_days_per_week": 3,
+            "duration_months": 6
         }
     }
 
+    result = simulate(test_input)
 
-if __name__ == "__main__":
-
-    result = simulate(
-        current_skill=50,
-        current_study=2,
-        current_projects=1,
-        current_exercise=3,
-
-        future_study=4,
-        future_projects=2,
-        future_exercise=2,
-
-        duration_months=6
-    )
-
-    print("\nSECONDSELF SIMULATION\n")
-
-    print("Final Results:")
-    print(result["final"])
-
-    print("\nMonthly Skill:")
-    print(result["skill"])
+    print("\nSECONDSELF SIMULATION RESULT")
+    print(result)
+    
